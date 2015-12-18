@@ -16,6 +16,8 @@ namespace WinProxyViewer
             program.Exit();
         }
 
+        private TextWriter _textWriter;
+
         /// <summary>
         /// Wait for a key when exiting.
         /// </summary>
@@ -30,16 +32,20 @@ namespace WinProxyViewer
         {
             ProgramName = System.AppDomain.CurrentDomain.FriendlyName;
             ProgramName = Path.GetFileNameWithoutExtension(ProgramName);
-
-            // output to console by default
-            TextWriter = Console.Out;
-            _exitWait = true;
         }
 
         /// <summary>
         /// Where to write the results.
         /// </summary>
-        public TextWriter TextWriter { get; private set; }
+        public TextWriter TextWriter
+        {
+            get { return _textWriter; }
+            private set
+            {
+                DisposeTextWriter();
+                _textWriter = value;
+            }
+        }
 
         /// <summary>
         /// Name of this executable program file.
@@ -47,9 +53,21 @@ namespace WinProxyViewer
         public string ProgramName { get; private set; }
 
         /// <summary>
-        /// Parce command line arguments and set the inner variables.
+        /// Parse command line arguments and set the inner variables. Set default values.
         /// </summary>
-        private void ParseArgs(string[] args)
+        public void ParseArgs(string[] args)
+        {
+            ParseArgsInner(args);
+
+            // default settings
+            if (TextWriter == null)
+                SetTmpTextWriter();
+        }
+
+        /// <summary>
+        /// Parse command line arguments and set the inner variables.
+        /// </summary>
+        private void ParseArgsInner(string[] args)
         {
             if (args == null || args.Length <= 0)
                 return;
@@ -64,6 +82,20 @@ namespace WinProxyViewer
                 if (argLower == "-h")
                     HelpAndExit();
 
+                if (argLower == "-tmp")
+                {
+                    SetTmpTextWriter();
+                    continue;
+                }
+
+                if (argLower == "-out")
+                {
+                    TextWriter = Console.Out;
+                    _exitWait = true;
+                    _exitOpenFileName = null;
+                    continue;
+                }
+
                 if (argLower == "-o")
                 {
                     if (i >= args.Length - 1)
@@ -72,20 +104,24 @@ namespace WinProxyViewer
 
                     TextWriter = new StreamWriter(args[i]);
                     _exitWait = false;
-                    continue;
-                }
-
-                if (argLower == "-tmp")
-                {
-                    string tmp = Path.GetTempFileName();
-                    _exitOpenFileName = Path.ChangeExtension(tmp, "txt");
-                    File.Move(tmp, _exitOpenFileName);
-
-                    TextWriter = new StreamWriter(_exitOpenFileName);
-                    _exitWait = false;
+                    _exitOpenFileName = null;
                     continue;
                 }
             }
+        }
+
+        /// <summary>
+        /// Set TextWriter to the temporary .txt file.
+        /// </summary>
+        private void SetTmpTextWriter()
+        {
+            // create temp .txt file
+            string tmpFileName = Path.GetTempFileName();
+            _exitOpenFileName = Path.ChangeExtension(tmpFileName, "txt");
+            File.Move(tmpFileName, _exitOpenFileName);
+
+            TextWriter = new StreamWriter(_exitOpenFileName);
+            _exitWait = false;
         }
 
         /// <summary>
@@ -93,7 +129,7 @@ namespace WinProxyViewer
         /// </summary>
         private void HelpAndExit()
         {
-            Console.WriteLine(string.Format("Usage: {0} [-h] [-tmp] [-o filename]", ProgramName));
+            Console.WriteLine(string.Format("Usage: {0} [-h] [-tmp] [-out] [-o filename]", ProgramName));
             _exitWait = true;
             Exit();
         }
@@ -132,6 +168,11 @@ namespace WinProxyViewer
         }
 
         public void Dispose()
+        {
+            DisposeTextWriter();
+        }
+
+        private void DisposeTextWriter()
         {
             if (TextWriter == null || TextWriter == Console.Out)
                 return;
